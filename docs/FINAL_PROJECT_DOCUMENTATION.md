@@ -101,8 +101,8 @@ The frontend reads/writes profile records through Supabase table operations.
 - `location`
 - `summary`
 - `skills` (stored as comma-separated string)
-- `education` (stored as concatenated text entries joined by `, `)
-- `experience` (stored as concatenated text entries joined by `, `)
+- `education` (stored as concatenated text entries joined by `, ` using the pattern: `degree institution year`)
+- `experience` (stored as concatenated text entries joined by `, ` using the pattern: `title company period description`)
 - `theme`
 
 ### Data Access Pattern
