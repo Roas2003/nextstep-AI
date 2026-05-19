@@ -260,7 +260,7 @@ Current implementation includes:
 - **Single profile record strategy** per user for lightweight data fetch and update flow.
 
 Potential technical constraints observed:
-- Denormalized storage format for skills, education, and experience (flattened strings in profile table).
+- Denormalized storage format for skills, education, and experience (comma-separated skills and flattened text strings in the profile table).
 - Function and profile fetch flows depend on network round-trips and per-page loading.
 
 ## Future Improvements
