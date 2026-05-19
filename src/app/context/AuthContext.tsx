@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 
 interface User {
   id: string;
@@ -10,7 +11,7 @@ interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<boolean>;
   register: (name: string, email: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  logout: () => Promise<void>;
   isAuthenticated: boolean;
 }
 
@@ -21,73 +22,93 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    // Check if user is logged in on mount
-    const storedUser = localStorage.getItem('currentUser');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-      setIsAuthenticated(true);
-    }
+    const getUser = async () => {
+      const { data, error } = await supabase.auth.getUser();
+
+      if (error) {
+        console.error('Get user error:', error.message);
+        setUser(null);
+        setIsAuthenticated(false);
+        return;
+      }
+
+      if (data.user) {
+        setUser({
+          id: data.user.id,
+          name: data.user.user_metadata?.name || '',
+          email: data.user.email || '',
+        });
+        setIsAuthenticated(true);
+      } else {
+        setUser(null);
+        setIsAuthenticated(false);
+      }
+    };
+
+    getUser();
   }, []);
 
   const register = async (name: string, email: string, password: string): Promise<boolean> => {
     try {
-      // Get existing users
-      const usersData = localStorage.getItem('users');
-      const users = usersData ? JSON.parse(usersData) : [];
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password,
+        options: {
+          data: { name },
+        },
+      });
 
-      // Check if email already exists
-      if (users.some((u: any) => u.email === email)) {
+      if (error) {
+        alert(error.message);
+        console.error('Register error:', error.message);
         return false;
       }
 
-      // Create new user
-      const newUser = {
-        id: Date.now().toString(),
-        name,
-        email,
-        password, // In production, this should be hashed
-      };
+      if (!data.user) {
+        alert('Registration failed. Please try again.');
+        return false;
+      }
 
-      // Save to localStorage
-      users.push(newUser);
-      localStorage.setItem('users', JSON.stringify(users));
-
-      // Don't auto login - user will login manually after registration
       return true;
     } catch (error) {
       console.error('Registration error:', error);
+      alert('Unexpected registration error');
       return false;
     }
   };
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      // Get users from localStorage
-      const usersData = localStorage.getItem('users');
-      const users = usersData ? JSON.parse(usersData) : [];
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      });
 
-      // Find user
-      const foundUser = users.find((u: any) => u.email === email && u.password === password);
-
-      if (foundUser) {
-        const userData = { id: foundUser.id, name: foundUser.name, email: foundUser.email };
-        setUser(userData);
-        setIsAuthenticated(true);
-        localStorage.setItem('currentUser', JSON.stringify(userData));
-        return true;
+      if (error || !data.user) {
+        alert(error?.message || 'Login failed');
+        console.error('Login error:', error?.message);
+        return false;
       }
 
-      return false;
+      setUser({
+        id: data.user.id,
+        name: data.user.user_metadata?.name || '',
+        email: data.user.email || '',
+      });
+
+      setIsAuthenticated(true);
+      return true;
     } catch (error) {
       console.error('Login error:', error);
+      alert('Unexpected login error');
       return false;
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
     setIsAuthenticated(false);
-    localStorage.removeItem('currentUser');
   };
 
   return (
@@ -99,8 +120,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
+
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
+
   return context;
 };
