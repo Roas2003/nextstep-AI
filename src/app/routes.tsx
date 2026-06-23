@@ -3,6 +3,8 @@ import { Home } from "./pages/Home";
 import { ResumeBuilder } from "./pages/ResumeBuilder";
 import { SkillAnalysis } from "./pages/SkillAnalysis";
 import { JobMatching } from "./pages/JobMatching";
+import { JobDetails } from "./pages/JobDetails";
+import { SavedJobs } from "./pages/SavedJobs";
 import { Dashboard } from "./pages/Dashboard";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
@@ -51,6 +53,22 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <JobMatching />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "jobs/:jobId",
+        element: (
+          <ProtectedRoute>
+            <JobDetails />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "saved-jobs",
+        element: (
+          <ProtectedRoute>
+            <SavedJobs />
           </ProtectedRoute>
         ),
       },

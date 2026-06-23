@@ -1,287 +1,902 @@
-import { useState, useEffect } from "react";
-import { Card } from "../components/ui/card";
-import { Button } from "../components/ui/button";
-import { Badge } from "../components/ui/badge";
-import { Progress } from "../components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { useEffect, useMemo, useState } from "react";
+import React from "react";
+import { useNavigate } from "react-router";
 import {
-  FileText,
   Briefcase,
+  Bookmark,
+  FileText,
   Target,
-  Award,
   Sparkles,
+  ArrowUpRight,
+  Brain,
 } from "lucide-react";
-import { Link } from "react-router";
-import { DashboardSkeleton } from "../components/DashboardSkeleton";
-import { toast } from "sonner";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 
-interface SavedResume {
-  id: string;
-  name: string;
-  lastModified: string;
-  skills: string[];
+interface ProfileData {
+  name?: string;
+  title?: string;
+  skills?: string;
 }
 
-interface SuggestedJob {
-  title: string;
-  match: number;
-  reason: string;
+interface JobRow {
+  id: string | number;
+  title?: string | null;
+  description?: string | null;
+  requirements?: string | null;
 }
 
 export function Dashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
 
-  const [savedResumes, setSavedResumes] = useState<SavedResume[]>([]);
-  const [userSkills, setUserSkills] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [savedJobsCount, setSavedJobsCount] = useState(0);
+  const [matchedJobsCount, setMatchedJobsCount] = useState(0);
+  const [loading, setLoading] = useState(true);
 
+  const cleanText = (text: string) =>
+    text
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/\s+/g, " ")
+      .trim();
+      const normalizeSkill = (skill: string) => {
+        const normalized = skill
+          .toLowerCase()
+          .trim()
+          .replace(/\s+/g, " ");
+      
+        const aliases: Record<string, string> = {
+          node: "node.js",
+          nodejs: "node.js",
+          "node.js": "node.js",
+      
+          js: "javascript",
+          javascript: "javascript",
+      
+          ts: "typescript",
+          typescript: "typescript",
+      
+          reactjs: "react",
+          "react.js": "react",
+          react: "react",
+      
+          html5: "html",
+          html: "html",
+      
+          css3: "css",
+          css: "css",
+      
+          postgres: "postgresql",
+          postgresql: "postgresql",
+        };
+      
+        return aliases[normalized] || normalized;
+      };
+      
+      const extractRequirements = (
+        text: string,
+        profileSkills: string[] = []
+      ): string[] => {
+        const normalizedText = text
+          .toLowerCase()
+          .replace(/<[^>]*>/g, " ")
+          .replace(/&nbsp;/g, " ")
+          .replace(/&amp;/g, "&")
+          .replace(/[._-]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      
+        const skillDefinitions: Array<{
+          name: string;
+          patterns: RegExp[];
+          category?: "frontend" | "backend" | "mobile" | "ux" | "devops";
+        }> = [
+          {
+            name: "React",
+            patterns: [/\breact\b/i, /\breactjs\b/i, /\breact js\b/i],
+            category: "frontend",
+          },
+          {
+            name: "TypeScript",
+            patterns: [/\btypescript\b/i, /\btype script\b/i],
+            category: "frontend",
+          },
+          {
+            name: "JavaScript",
+            patterns: [/\bjavascript\b/i, /\bjava script\b/i],
+            category: "frontend",
+          },
+          {
+            name: "HTML",
+            patterns: [/\bhtml\b/i, /\bhtml5\b/i],
+            category: "frontend",
+          },
+          {
+            name: "CSS",
+            patterns: [/\bcss\b/i, /\bcss3\b/i],
+            category: "frontend",
+          },
+          {
+            name: "Angular",
+            patterns: [/\bangular\b/i],
+            category: "frontend",
+          },
+          {
+            name: "Vue.js",
+            patterns: [/\bvue\b/i, /\bvuejs\b/i, /\bvue js\b/i],
+            category: "frontend",
+          },
+          {
+            name: "Next.js",
+            patterns: [/\bnextjs\b/i, /\bnext js\b/i],
+            category: "frontend",
+          },
+      
+          {
+            name: "Node.js",
+            patterns: [/\bnode\b/i, /\bnodejs\b/i, /\bnode js\b/i],
+            category: "backend",
+          },
+          {
+            name: "Express",
+            patterns: [/\bexpress\b/i, /\bexpressjs\b/i, /\bexpress js\b/i],
+            category: "backend",
+          },
+          {
+            name: "PHP",
+            patterns: [/\bphp\b/i],
+            category: "backend",
+          },
+          {
+            name: "Laravel",
+            patterns: [/\blaravel\b/i],
+            category: "backend",
+          },
+          {
+            name: "Python",
+            patterns: [/\bpython\b/i],
+            category: "backend",
+          },
+          {
+            name: "Django",
+            patterns: [/\bdjango\b/i],
+            category: "backend",
+          },
+          {
+            name: "Java",
+            patterns: [/\bjava\b/i],
+            category: "backend",
+          },
+          {
+            name: "Spring Boot",
+            patterns: [/\bspring boot\b/i, /\bspringboot\b/i],
+            category: "backend",
+          },
+          {
+            name: "Ruby",
+            patterns: [/\bruby\b/i],
+            category: "backend",
+          },
+          {
+            name: "Ruby on Rails",
+            patterns: [/\bruby on rails\b/i, /\brails\b/i],
+            category: "backend",
+          },
+          {
+            name: "C#",
+            patterns: [/c#/i, /\bc sharp\b/i],
+            category: "backend",
+          },
+          {
+            name: ".NET",
+            patterns: [/\.net\b/i, /\bdot net\b/i],
+            category: "backend",
+          },
+      
+          {
+            name: "SQL",
+            patterns: [/\bsql\b/i],
+          },
+          {
+            name: "MySQL",
+            patterns: [/\bmysql\b/i, /\bmy sql\b/i],
+          },
+          {
+            name: "PostgreSQL",
+            patterns: [/\bpostgresql\b/i, /\bpostgres\b/i],
+          },
+          {
+            name: "MongoDB",
+            patterns: [/\bmongodb\b/i, /\bmongo db\b/i],
+          },
+          {
+            name: "Supabase",
+            patterns: [/\bsupabase\b/i],
+          },
+          {
+            name: "Firebase",
+            patterns: [/\bfirebase\b/i],
+          },
+          {
+            name: "REST API",
+            patterns: [
+              /\brest api\b/i,
+              /\brestful api\b/i,
+              /\brestful services\b/i,
+            ],
+          },
+          {
+            name: "GraphQL",
+            patterns: [/\bgraphql\b/i, /\bgraph ql\b/i],
+          },
+      
+          {
+            name: "Git",
+            patterns: [/\bgit\b/i],
+            category: "devops",
+          },
+          {
+            name: "GitHub",
+            patterns: [/\bgithub\b/i, /\bgit hub\b/i],
+            category: "devops",
+          },
+          {
+            name: "Docker",
+            patterns: [/\bdocker\b/i],
+            category: "devops",
+          },
+          {
+            name: "Kubernetes",
+            patterns: [/\bkubernetes\b/i, /\bk8s\b/i],
+            category: "devops",
+          },
+          {
+            name: "AWS",
+            patterns: [/\baws\b/i, /\bamazon web services\b/i],
+            category: "devops",
+          },
+          {
+            name: "Azure",
+            patterns: [/\bazure\b/i],
+            category: "devops",
+          },
+          {
+            name: "Linux",
+            patterns: [/\blinux\b/i],
+            category: "devops",
+          },
+          {
+            name: "CI/CD",
+            patterns: [/\bci cd\b/i, /\bcontinuous integration\b/i],
+            category: "devops",
+          },
+      
+          {
+            name: "Flutter",
+            patterns: [/\bflutter\b/i],
+            category: "mobile",
+          },
+          {
+            name: "React Native",
+            patterns: [/\breact native\b/i],
+            category: "mobile",
+          },
+          {
+            name: "Kotlin",
+            patterns: [/\bkotlin\b/i],
+            category: "mobile",
+          },
+          {
+            name: "Swift",
+            patterns: [/\bswift\b/i],
+            category: "mobile",
+          },
+          {
+            name: "Android",
+            patterns: [/\bandroid\b/i],
+            category: "mobile",
+          },
+          {
+            name: "iOS",
+            patterns: [/\bios\b/i],
+            category: "mobile",
+          },
+      
+          {
+            name: "Figma",
+            patterns: [/\bfigma\b/i],
+            category: "ux",
+          },
+          {
+            name: "UI Design",
+            patterns: [/\bui design\b/i, /\buser interface design\b/i],
+            category: "ux",
+          },
+          {
+            name: "UX Design",
+            patterns: [/\bux design\b/i, /\buser experience design\b/i],
+            category: "ux",
+          },
+      
+          {
+            name: "Machine Learning",
+            patterns: [/\bmachine learning\b/i],
+          },
+          {
+            name: "Artificial Intelligence",
+            patterns: [/\bartificial intelligence\b/i],
+          },
+          {
+            name: "Data Analysis",
+            patterns: [/\bdata analysis\b/i, /\bdata analytics\b/i],
+          },
+        ];
+      
+        const detectedDetailedSkills = skillDefinitions
+          .filter((definition) =>
+            definition.patterns.some((pattern) => pattern.test(normalizedText))
+          )
+          .map((definition) => definition.name);
+      
+        const detectedProfileSkills = profileSkills.filter((skill) => {
+          const originalSkill = skill
+            .toLowerCase()
+            .trim()
+            .replace(/[._-]+/g, " ")
+            .replace(/\s+/g, " ");
+      
+          const normalizedProfileSkill = normalizeSkill(skill)
+            .toLowerCase()
+            .replace(/[._-]+/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+      
+          return (
+            originalSkill.length >= 2 &&
+            (normalizedText.includes(originalSkill) ||
+              normalizedText.includes(normalizedProfileSkill))
+          );
+        });
+      
+        const detailedSkills = Array.from(
+          new Map(
+            [...detectedDetailedSkills, ...detectedProfileSkills].map((skill) => [
+              normalizeSkill(skill),
+              skill,
+            ])
+          ).values()
+        );
+      
+        const hasFrontendDetails = skillDefinitions.some(
+          (definition) =>
+            definition.category === "frontend" &&
+            detailedSkills.some(
+              (skill) =>
+                normalizeSkill(skill) === normalizeSkill(definition.name)
+            )
+        );
+      
+        const hasBackendDetails = skillDefinitions.some(
+          (definition) =>
+            definition.category === "backend" &&
+            detailedSkills.some(
+              (skill) =>
+                normalizeSkill(skill) === normalizeSkill(definition.name)
+            )
+        );
+      
+        const hasMobileDetails = skillDefinitions.some(
+          (definition) =>
+            definition.category === "mobile" &&
+            detailedSkills.some(
+              (skill) =>
+                normalizeSkill(skill) === normalizeSkill(definition.name)
+            )
+        );
+      
+        const hasUxDetails = skillDefinitions.some(
+          (definition) =>
+            definition.category === "ux" &&
+            detailedSkills.some(
+              (skill) =>
+                normalizeSkill(skill) === normalizeSkill(definition.name)
+            )
+        );
+      
+        const hasDevOpsDetails = skillDefinitions.some(
+          (definition) =>
+            definition.category === "devops" &&
+            detailedSkills.some(
+              (skill) =>
+                normalizeSkill(skill) === normalizeSkill(definition.name)
+            )
+        );
+      
+        const generalSkills: string[] = [];
+      
+        if (
+          !hasFrontendDetails &&
+          (/\bfrontend\b/i.test(normalizedText) ||
+            /\bfront end\b/i.test(normalizedText))
+        ) {
+          generalSkills.push("Frontend");
+        }
+      
+        if (
+          !hasBackendDetails &&
+          (/\bbackend\b/i.test(normalizedText) ||
+            /\bback end\b/i.test(normalizedText))
+        ) {
+          generalSkills.push("Backend");
+        }
+      
+        if (
+          !hasMobileDetails &&
+          (/\bmobile development\b/i.test(normalizedText) ||
+            /\bmobile developer\b/i.test(normalizedText))
+        ) {
+          generalSkills.push("Mobile Development");
+        }
+      
+        if (
+          !hasUxDetails &&
+          (/\buser experience\b/i.test(normalizedText) ||
+            /\bux\b/i.test(normalizedText))
+        ) {
+          generalSkills.push("UX");
+        }
+      
+        if (
+          !hasDevOpsDetails &&
+          /\bdevops\b/i.test(normalizedText)
+        ) {
+          generalSkills.push("DevOps");
+        }
+      
+        if (
+          /\bapi\b/i.test(normalizedText) &&
+          !detailedSkills.some(
+            (skill) =>
+              normalizeSkill(skill) === normalizeSkill("REST API") ||
+              normalizeSkill(skill) === normalizeSkill("GraphQL")
+          )
+        ) {
+          generalSkills.push("API");
+        }
+      
+        return Array.from(
+          new Map(
+            [...detailedSkills, ...generalSkills].map((skill) => [
+              normalizeSkill(skill),
+              skill,
+            ])
+          ).values()
+        ).slice(0, 10);
+      };
+      
+      const calculateJobMatch = (
+        skills: string[],
+        requirements: string[]
+      ) => {
+        if (skills.length === 0 || requirements.length === 0) {
+          return 0;
+        }
+      
+        const normalizedSkills = new Set(
+          skills.map((skill) => normalizeSkill(skill))
+        );
+      
+        const frontendSkills = [
+          "react",
+          "javascript",
+          "typescript",
+          "html",
+          "css",
+          "angular",
+          "vue",
+          "next.js",
+        ];
+      
+        const backendSkills = [
+          "node.js",
+          "express",
+          "php",
+          "laravel",
+          "python",
+          "java",
+          "ruby",
+          "ruby on rails",
+          "c#",
+          ".net",
+        ];
+      
+        const uxSkills = [
+          "ux",
+          "ui",
+          "figma",
+          "user experience",
+          "user interface",
+        ];
+      
+        const mobileSkills = [
+          "flutter",
+          "react native",
+          "kotlin",
+          "swift",
+          "android",
+          "ios",
+        ];
+      
+        const devOpsSkills = [
+          "docker",
+          "kubernetes",
+          "linux",
+          "aws",
+          "terraform",
+          "ci/cd",
+        ];
+      
+        const hasAnySkill = (skillGroup: string[]) =>
+          skillGroup.some((skill) =>
+            normalizedSkills.has(normalizeSkill(skill))
+          );
+      
+        if (hasAnySkill(frontendSkills)) {
+          normalizedSkills.add("frontend");
+        }
+      
+        if (hasAnySkill(backendSkills)) {
+          normalizedSkills.add("backend");
+        }
+      
+        if (hasAnySkill(uxSkills)) {
+          normalizedSkills.add("ux");
+          normalizedSkills.add("ui");
+        }
+      
+        if (hasAnySkill(mobileSkills)) {
+          normalizedSkills.add("mobile");
+        }
+      
+        if (hasAnySkill(devOpsSkills)) {
+          normalizedSkills.add("devops");
+        }
+      
+        const normalizedRequirements = Array.from(
+          new Set(
+            requirements.map((requirement) =>
+              normalizeSkill(requirement)
+            )
+          )
+        );
+      
+        const matchedRequirements = normalizedRequirements.filter(
+          (requirement) => normalizedSkills.has(requirement)
+        );
+      
+        return Math.round(
+          (matchedRequirements.length /
+            normalizedRequirements.length) *
+            100
+        );
+      };
   useEffect(() => {
-    const loadData = async () => {
+    const fetchDashboardData = async () => {
       if (!user) {
-        setIsLoading(false);
+        setLoading(false);
         return;
       }
 
-      const { data, error } = await supabase
+      setLoading(true);
+
+      const { data: profileData } = await supabase
         .from("profile")
-        .select("*")
+        .select("name, title, skills")
         .eq("user_id", user.id)
         .maybeSingle();
 
-      if (error) {
-        console.error(error);
-        toast.error("فشل تحميل البيانات");
-        setIsLoading(false);
-        return;
-      }
+      const skills = profileData?.skills
+        ? String(profileData.skills)
+            .split(",")
+            .map((skill) => skill.trim())
+            .filter(Boolean)
+        : [];
 
-      if (data) {
-        const skills = data.skills
-          ? String(data.skills)
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean)
-          : [];
+      const { data: savedJobsData } = await supabase
+        .from("saved_jobs")
+        .select("id")
+        .eq("user_id", user.id);
 
-        setUserSkills(skills);
+      const { data: jobsData } = await supabase
+        .from("jobs")
+        .select("id, title, description, requirements");
 
-        setSavedResumes([
-          {
-            id: "1",
-            name: data.name || "سيرة ذاتية",
-            lastModified: new Date().toLocaleDateString(),
+        const matchedJobs = ((jobsData || []) as JobRow[]).filter((job) => {
+          const cleanDescription = cleanText(job.description || "");
+        
+          const requirements = extractRequirements(
+            `${job.title || ""} ${job.requirements || ""} ${cleanDescription}`
+          );
+        
+          const matchPercentage = calculateJobMatch(
             skills,
-          },
-        ]);
-      }
-
-      setIsLoading(false);
+            requirements
+          );
+          return matchPercentage > 0;
+        });
+        
+        const matchedJobsCountValue = matchedJobs.length;
+      setProfile(profileData || null);
+      setSavedJobsCount(savedJobsData?.length || 0);
+      setMatchedJobsCount(matchedJobsCountValue);
+            setLoading(false);
     };
 
-    loadData();
+    fetchDashboardData();
   }, [user]);
 
-  const hasSkill = (keywords: string[]) => {
-    return userSkills.some((skill) =>
-      keywords.some((keyword) =>
-        skill.toLowerCase().includes(keyword.toLowerCase())
+  const skillsArray = useMemo(() => {
+    if (!profile?.skills) return [];
+
+    return profile.skills
+      .split(",")
+      .map((skill) => skill.trim())
+      .filter(Boolean);
+  }, [profile?.skills]);
+
+  const bestCareerMatch = useMemo(() => {
+    const normalizedUserSkills = Array.from(
+      new Set(
+        skillsArray.map((skill) => normalizeSkill(skill))
       )
     );
-  };
+  
+    const calculateMatch = (requiredSkills: string[]) => {
+      if (
+        normalizedUserSkills.length === 0 ||
+        requiredSkills.length === 0
+      ) {
+        return 0;
+      }
+  
+      const normalizedRequiredSkills = Array.from(
+        new Set(
+          requiredSkills.map((skill) => normalizeSkill(skill))
+        )
+      );
+  
+      const matchedSkills = normalizedRequiredSkills.filter(
+        (requiredSkill) =>
+          normalizedUserSkills.includes(requiredSkill)
+      );
+  
+      return Math.round(
+        (matchedSkills.length /
+          normalizedRequiredSkills.length) *
+          100
+      );
+    };
+  
+    const careerPaths = [
+      {
+        title: "مطور Frontend",
+        percentage: calculateMatch([
+          "React",
+          "TypeScript",
+          "JavaScript",
+          "HTML",
+          "CSS",
+        ]),
+      },
+      {
+        title: "مطور Backend",
+        percentage: calculateMatch([
+          "Node.js",
+          "Python",
+          "Java",
+          "PHP",
+          "Laravel",
+          "API",
+        ]),
+      },
+      {
+        title: "مطور Full Stack",
+        percentage: calculateMatch([
+          "HTML",
+          "CSS",
+          "JavaScript",
+          "TypeScript",
+          "React",
+          "Node.js",
+          "Express",
+          "PHP",
+          "Laravel",
+          "API Design",
+          "MongoDB",
+          "SQL",
+          "Supabase",
+          "Git",
+          "GitHub",
+          "Docker",
+          "AWS",
+        ]),
+      },
+      {
+        title: "مهندس DevOps",
+        percentage: calculateMatch([
+          "Linux",
+          "Git",
+          "Bash",
+          "Docker",
+          "CI/CD",
+          "AWS",
+          "Kubernetes",
+          "Terraform",
+        ]),
+      },
+      {
+        title: "مطور تطبيقات الموبايل",
+        percentage: calculateMatch([
+          "React Native",
+          "Flutter",
+          "Swift",
+          "Kotlin",
+        ]),
+      },
+    ];
+  
+    return careerPaths.reduce((bestPath, currentPath) =>
+      currentPath.percentage > bestPath.percentage
+        ? currentPath
+        : bestPath
+    );
+  }, [skillsArray]);
+  
+  const bestCareerPath = bestCareerMatch.title;
+  const matchPercentage = bestCareerMatch.percentage;
 
-  const getSuggestedJobs = (): SuggestedJob[] => {
-    const jobs: SuggestedJob[] = [];
+  const userName =
+    profile?.name?.trim() || user?.email?.split("@")[0] || "User";
 
-    if (hasSkill(["react", "javascript", "html", "css", "frontend"])) {
-      jobs.push({
-        title: "Frontend Developer",
-        match: 95,
-        reason: "مناسب لأن عندك مهارات واجهات مثل React / JavaScript / HTML / CSS",
-      });
-    }
-
-    if (hasSkill(["node", "express", "api", "backend", "database", "supabase"])) {
-      jobs.push({
-        title: "Backend Developer",
-        match: 88,
-        reason: "مناسب لأن عندك مهارات Backend أو Database أو Supabase",
-      });
-    }
-
-    if (hasSkill(["ui", "ux", "figma", "design"])) {
-      jobs.push({
-        title: "UI/UX Designer",
-        match: 90,
-        reason: "مناسب لأن عندك مهارات تصميم وتجربة مستخدم",
-      });
-    }
-
-    if (hasSkill(["python", "ai", "machine learning", "data"])) {
-      jobs.push({
-        title: "AI / Data Assistant",
-        match: 85,
-        reason: "مناسب لأن عندك مهارات Python أو AI أو Data",
-      });
-    }
-
-    if (jobs.length === 0) {
-      jobs.push({
-        title: "Junior Software Developer",
-        match: 70,
-        reason: "مناسب كبداية لأنك بدأتِ ببناء سيرة ومهارات تقنية",
-      });
-    }
-
-    return jobs;
-  };
-
-  const suggestedJobs = getSuggestedJobs();
-
-  const averageMatch = suggestedJobs.length
-    ? Math.round(
-        suggestedJobs.reduce((sum, job) => sum + job.match, 0) /
-          suggestedJobs.length
-      )
-    : 0;
-
-  const stats = [
-    {
-      icon: FileText,
-      label: "السير الذاتية",
-      value: savedResumes.length,
-      link: "/resume",
-    },
-    {
-      icon: Briefcase,
-      label: "وظائف مقترحة",
-      value: suggestedJobs.length,
-      link: "/dashboard",
-    },
-    {
-      icon: Target,
-      label: "المهارات",
-      value: userSkills.length,
-      link: "/skills",
-    },
-    {
-      icon: Award,
-      label: "التوافق",
-      value: `${averageMatch}%`,
-      link: "/dashboard",
-    },
-  ];
+  if (loading) {
+    return (
+      <div
+        dir="rtl"
+        className="min-h-screen bg-[#f5fbff] flex items-center justify-center"
+      >
+        <p className="text-slate-600 text-lg">جاري تحميل لوحة التحكم...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen py-8">
-      <div className="container mx-auto px-4">
-        <h1 className="text-3xl font-bold mb-6">لوحة التحكم</h1>
+    <div dir="rtl" className="min-h-screen bg-[#f5fbff] px-6 py-10">
+      <div className="max-w-7xl mx-auto space-y-8">
+        <section className="rounded-[32px] bg-gradient-to-l from-[#24104f] via-[#050719] to-[#063d4b] text-white p-10 shadow-xl">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
+            <div className="lg:col-span-2 space-y-6 text-right">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm">
+                <Brain className="w-4 h-4 text-cyan-300" />
+                AI Career Dashboard
+              </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          {stats.map((stat, i) => {
-            const Icon = stat.icon;
+              <h1 className="text-5xl font-extrabold">مرحباً، {userName}</h1>
 
-            return (
-              <Link key={i} to={stat.link}>
-                <Card className="p-4 text-center hover:shadow-md transition">
-                  <Icon className="mx-auto mb-2" />
-                  <p>{stat.label}</p>
-                  <h2 className="text-xl font-bold">{stat.value}</h2>
-                </Card>
-              </Link>
-            );
-          })}
-        </div>
+              <p className="text-xl leading-relaxed text-slate-200">
+                لوحة ذكية تلخص مهاراتك، توافقك المهني، الوظائف المتاحة،
+                والدورات التي تحتاجينها لتطوير مسارك المهني.
+              </p>
 
-        <Tabs defaultValue="resumes">
-          <TabsList className="mb-4">
-            <TabsTrigger value="resumes">السيرة</TabsTrigger>
-            <TabsTrigger value="skills">المهارات</TabsTrigger>
-            <TabsTrigger value="jobs">وظائف مقترحة</TabsTrigger>
-          </TabsList>
+              <div className="flex gap-3 justify-start flex-row-reverse">
+                <button
+                  onClick={() => navigate("/jobs")}
+                  className="bg-white text-slate-900 px-6 py-3 rounded-xl font-semibold flex items-center gap-2"
+                >
+                  استعراض الوظائف
+                  <ArrowUpRight className="w-4 h-4" />
+                </button>
 
-          <TabsContent value="resumes">
-            {isLoading ? (
-              <DashboardSkeleton />
-            ) : savedResumes.length > 0 ? (
-              savedResumes.map((resume) => (
-                <Card key={resume.id} className="p-4 mb-4">
-                  <h3 className="font-bold">{resume.name}</h3>
-                  <p className="text-sm text-gray-500">
-                    آخر تعديل: {resume.lastModified}
-                  </p>
-
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {resume.skills.map((skill, i) => (
-                      <Badge key={i}>{skill}</Badge>
-                    ))}
-                  </div>
-
-                  <Link to="/resume">
-                    <Button className="mt-3">تعديل السيرة</Button>
-                  </Link>
-                </Card>
-              ))
-            ) : (
-              <Card className="p-6">
-                <p>ما في بيانات. أنشئي سيرة ذاتية أولاً.</p>
-                <Link to="/resume">
-                  <Button className="mt-3">إنشاء سيرة</Button>
-                </Link>
-              </Card>
-            )}
-          </TabsContent>
-
-          <TabsContent value="skills">
-            <Card className="p-4">
-              <h3 className="font-bold mb-3">مهاراتك الحالية</h3>
-
-              {userSkills.length > 0 ? (
-                userSkills.map((skill, i) => (
-                  <Badge key={i} className="m-1">
-                    {skill}
-                  </Badge>
-                ))
-              ) : (
-                <p>ما في مهارات</p>
-              )}
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="jobs">
-            <div className="space-y-4">
-              {suggestedJobs.map((job, i) => (
-                <Card key={i} className="p-5">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Sparkles className="w-5 h-5 text-purple-600" />
-                    <h3 className="font-bold text-lg">{job.title}</h3>
-                  </div>
-
-                  <p className="text-gray-600 mb-3">{job.reason}</p>
-
-                  <div className="mb-2 flex justify-between text-sm">
-                    <span>نسبة التوافق</span>
-                    <span>{job.match}%</span>
-                  </div>
-
-                  <Progress value={job.match} />
-
-                  <Button
-                    className="mt-4"
-                    onClick={() => {
-                      localStorage.setItem("selectedJob", job.title);
-                      window.location.href = "/resume";
-                    }}
-                  >
-                    حسّني السيرة لهذه الوظيفة
-                  </Button>
-                </Card>
-              ))}
+                <button
+                  onClick={() => navigate("/skills")}
+                  className="bg-cyan-500 text-white px-6 py-3 rounded-xl font-semibold flex items-center gap-2"
+                >
+                  تحليل المهارات
+                  <Sparkles className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-          </TabsContent>
-        </Tabs>
+
+            <div className="rounded-[28px] border border-white/15 bg-white/10 p-8 shadow-inner">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-cyan-100 text-lg">أفضل توافق مهني</p>
+                  <h2 className="text-5xl font-black mt-2">
+                    {matchPercentage}%
+                  </h2>
+                </div>
+
+                <div className="bg-cyan-500/30 p-4 rounded-2xl">
+                  <Target className="w-9 h-9 text-cyan-200" />
+                </div>
+              </div>
+
+              <div className="w-full h-3 bg-white/80 rounded-full mt-7 overflow-hidden">
+                <div
+                  className="h-full bg-cyan-400 rounded-full"
+                  style={{ width: `${matchPercentage}%` }}
+                />
+              </div>
+
+              <div className="mt-6">
+                <p className="text-cyan-100 mb-2">أفضل مسار مقترح لك</p>
+                <h3 className="text-2xl font-extrabold">{bestCareerPath}</h3>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <DashboardCard
+            title="المهارات"
+            value={skillsArray.length}
+            icon={<Target className="w-8 h-8" />}
+            onClick={() => navigate("/skills")}
+          />
+
+          <DashboardCard
+            title="وظائف محفوظة"
+            value={savedJobsCount}
+            icon={<Bookmark className="w-8 h-8" />}
+            onClick={() => navigate("/saved-jobs")}
+          />
+
+          <DashboardCard
+            title=" الوظائف المتوافقه" 
+            value={matchedJobsCount}
+            icon={<Briefcase className="w-8 h-8" />}
+            onClick={() => navigate("/jobs")}
+          />
+
+          <DashboardCard
+            title="السير الذاتية"
+            value={profile ? 1 : 0}
+            icon={<FileText className="w-8 h-8" />}
+            onClick={() => navigate("/resume")}
+          />
+        </section>
       </div>
     </div>
+  );
+}
+
+function DashboardCard({
+  title,
+  value,
+  icon,
+  onClick,
+}: {
+  title: string;
+  value: number;
+  icon: React.ReactNode;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-right bg-white rounded-[26px] p-7 shadow-md border border-cyan-100 min-h-[170px] flex justify-between items-start cursor-pointer hover:shadow-xl transition-all duration-300"
+    >
+      <div>
+        <h3 className="text-4xl font-black text-slate-950">{value}</h3>
+        <p className="mt-12 text-2xl font-bold text-slate-700">{title}</p>
+      </div>
+
+      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 text-white flex items-center justify-center shadow-lg">
+        {icon}
+      </div>
+    </button>
   );
 }

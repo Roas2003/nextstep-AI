@@ -19,21 +19,31 @@ export const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
+  
+    if (!email.trim()) {
+      toast.error("الرجاء إدخال البريد الإلكتروني");
+      return;
+    }
+  
+    if (!password.trim()) {
+      toast.error("الرجاء إدخال كلمة المرور");
+      return;
+    }
+  
     setIsLoading(true);
-
+  
     try {
       const success = await login(email, password);
-
+  
       if (success) {
-        toast.success('تم تسجيل الدخول بنجاح!');
-        navigate('/');
+        toast.success("تم تسجيل الدخول بنجاح!");
+        navigate("/");
       } else {
-        toast.error('البريد الإلكتروني أو كلمة المرور غير صحيحة');
+        toast.error("البريد الإلكتروني أو كلمة المرور غير صحيحة");
       }
     } catch (error) {
-      toast.error('حدث خطأ أثناء تسجيل الدخول');
-      console.log(error);
+      console.error(error);
+      toast.error("حدث خطأ أثناء تسجيل الدخول");
     } finally {
       setIsLoading(false);
     }

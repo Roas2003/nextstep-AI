@@ -1,16 +1,12 @@
+
+import * as React from "react";
+import { useLocation, useNavigate } from "react-router";
 import { useState, useEffect } from "react";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import { Skeleton } from "../components/ui/skeleton";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../components/ui/select";
 import {
   Briefcase,
   MapPin,
@@ -38,79 +34,632 @@ interface Job {
   requirements: string[];
   matchPercentage: number;
   postedDate: string;
-  logo?: string;
+  url?: string;
 }
 
 export function JobMatching() {
   const { user } = useAuth();
-
+  const navigate = useNavigate();
+  const location = useLocation();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [cityFilter, setCityFilter] = useState("all");
+  const [locationFilter, setLocationFilter] = useState("all");
   const [experienceFilter, setExperienceFilter] = useState("all");
   const [userSkills, setUserSkills] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const normalizeAIJobs = (aiJobs: any[]): Job[] => {
-    return aiJobs.map((job, index) => ({
-      id: String(index + 1),
-      title: job.title || "وظيفة تقنية مقترحة",
-      company: job.company || "AI Suggested Company",
-      location: job.location || "Remote",
-      salary: job.salary || "غير محدد",
-      type: job.type || "دوام كامل",
-      experience: job.experience || "مناسب حسب المهارات",
-      description:
-        job.description ||
-        "تم اقتراح هذه الوظيفة بناءً على تحليل مهاراتك باستخدام الذكاء الاصطناعي.",
-      requirements: Array.isArray(job.requirements) ? job.requirements : userSkills,
-      matchPercentage:
-        typeof job.matchPercentage === "number" ? job.matchPercentage : 80,
-      postedDate: job.postedDate || "AI Recommendation",
-    }));
+  const cleanText = (text: string) =>
+    text
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const normalizeLocation = (location: string) => {
+    const lower = location.toLowerCase();
+
+    if (
+      lower.includes("remote") ||
+      lower.includes("worldwide") ||
+      lower.includes("anywhere") ||
+      lower.includes("usa") ||
+      lower.includes("europe") ||
+      lower.includes("canada") ||
+      lower.includes("latam")
+    ) {
+      return "عن بعد";
+    }
+
+    if (lower.includes("amman") || location.includes("عمان")) return "عمان";
+    if (lower.includes("irbid") || location.includes("إربد") || location.includes("اربد")) return "إربد";
+    if (lower.includes("zarqa") || location.includes("الزرقاء")) return "الزرقاء";
+    if (lower.includes("aqaba") || location.includes("العقبة")) return "العقبة";
+
+    return "عن بعد";
   };
 
-  const getFallbackJobs = (skills: string[]): Job[] => {
-    return [
+  const normalizeExperience = (title: string, description: string) => {
+    const text = `${title} ${description}`.toLowerCase();
+
+    if (
+      text.includes("junior") ||
+      text.includes("entry") ||
+      text.includes("fresh") ||
+      text.includes("intern")
+    ) {
+      return "مبتدئ";
+    }
+
+    if (
+      text.includes("senior") ||
+      text.includes("lead") ||
+      text.includes("principal") ||
+      text.includes("staff")
+    ) {
+      return "متقدم";
+    }
+
+    return "متوسط";
+  };
+  const normalizeSkill = (skill: string) => {
+    const normalized = skill
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, " ");
+  
+    const aliases: Record<string, string> = {
+      node: "node.js",
+      nodejs: "node.js",
+      "node.js": "node.js",
+  
+      js: "javascript",
+      javascript: "javascript",
+  
+      ts: "typescript",
+      typescript: "typescript",
+  
+      reactjs: "react",
+      "react.js": "react",
+      react: "react",
+  
+      html5: "html",
+      html: "html",
+  
+      css3: "css",
+      css: "css",
+  
+      postgres: "postgresql",
+      postgresql: "postgresql",
+    };
+  
+    return aliases[normalized] || normalized;
+  };
+  const extractRequirements = (
+    text: string,
+    profileSkills: string[] = []
+  ): string[] => {
+    const normalizedText = text
+      .toLowerCase()
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/[._-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  
+    const skillDefinitions: Array<{
+      name: string;
+      patterns: RegExp[];
+      category?: "frontend" | "backend" | "mobile" | "ux" | "devops";
+    }> = [
+      // Frontend
       {
-        id: "fallback-1",
-        title: "Frontend Developer",
-        company: "AI Career Assistant",
-        location: "Remote",
-        salary: "حسب الخبرة",
-        type: "دوام كامل",
-        experience: "مبتدئ - متوسط",
-        description:
-          "اقتراح احتياطي مناسب إذا كانت مهاراتك تحتوي على React أو JavaScript أو HTML أو CSS.",
-        requirements: ["React", "JavaScript", "HTML", "CSS"],
-        matchPercentage: skills.some((s) =>
-          ["react", "javascript", "html", "css"].some((k) =>
-            s.toLowerCase().includes(k)
-          )
-        )
-          ? 90
-          : 70,
-        postedDate: "Fallback",
+        name: "React",
+        patterns: [/\breact\b/i, /\breactjs\b/i, /\breact js\b/i],
+        category: "frontend",
       },
       {
-        id: "fallback-2",
-        title: "Junior Software Developer",
-        company: "AI Career Assistant",
-        location: "Remote",
-        salary: "حسب الخبرة",
-        type: "دوام كامل",
-        experience: "مبتدئ",
-        description: "اقتراح عام مناسب كبداية للخريجين الجدد في مجال البرمجة.",
-        requirements: ["Problem Solving", "Git", "Teamwork"],
-        matchPercentage: 75,
-        postedDate: "Fallback",
+        name: "TypeScript",
+        patterns: [/\btypescript\b/i, /\btype script\b/i],
+        category: "frontend",
+      },
+      {
+        name: "JavaScript",
+        patterns: [/\bjavascript\b/i, /\bjava script\b/i],
+        category: "frontend",
+      },
+      {
+        name: "HTML",
+        patterns: [/\bhtml\b/i, /\bhtml5\b/i],
+        category: "frontend",
+      },
+      {
+        name: "CSS",
+        patterns: [/\bcss\b/i, /\bcss3\b/i],
+        category: "frontend",
+      },
+      {
+        name: "Angular",
+        patterns: [/\bangular\b/i],
+        category: "frontend",
+      },
+      {
+        name: "Vue.js",
+        patterns: [/\bvue\b/i, /\bvuejs\b/i, /\bvue js\b/i],
+        category: "frontend",
+      },
+      {
+        name: "Next.js",
+        patterns: [/\bnextjs\b/i, /\bnext js\b/i],
+        category: "frontend",
+      },
+  
+      // Backend
+      {
+        name: "Node.js",
+        patterns: [/\bnode\b/i, /\bnodejs\b/i, /\bnode js\b/i],
+        category: "backend",
+      },
+      {
+        name: "Express",
+        patterns: [/\bexpress\b/i, /\bexpressjs\b/i, /\bexpress js\b/i],
+        category: "backend",
+      },
+      {
+        name: "PHP",
+        patterns: [/\bphp\b/i],
+        category: "backend",
+      },
+      {
+        name: "Laravel",
+        patterns: [/\blaravel\b/i],
+        category: "backend",
+      },
+      {
+        name: "Python",
+        patterns: [/\bpython\b/i],
+        category: "backend",
+      },
+      {
+        name: "Django",
+        patterns: [/\bdjango\b/i],
+        category: "backend",
+      },
+      {
+        name: "Java",
+        patterns: [/\bjava\b/i],
+        category: "backend",
+      },
+      {
+        name: "Spring Boot",
+        patterns: [/\bspring boot\b/i, /\bspringboot\b/i],
+        category: "backend",
+      },
+      {
+        name: "Ruby",
+        patterns: [/\bruby\b/i],
+        category: "backend",
+      },
+      {
+        name: "Ruby on Rails",
+        patterns: [/\bruby on rails\b/i, /\brails\b/i],
+        category: "backend",
+      },
+      {
+        name: "C#",
+        patterns: [/c#/i, /\bc sharp\b/i],
+        category: "backend",
+      },
+      {
+        name: ".NET",
+        patterns: [/\.net\b/i, /\bdot net\b/i],
+        category: "backend",
+      },
+  
+      // Database and API
+      {
+        name: "SQL",
+        patterns: [/\bsql\b/i],
+      },
+      {
+        name: "MySQL",
+        patterns: [/\bmysql\b/i, /\bmy sql\b/i],
+      },
+      {
+        name: "PostgreSQL",
+        patterns: [/\bpostgresql\b/i, /\bpostgres\b/i],
+      },
+      {
+        name: "MongoDB",
+        patterns: [/\bmongodb\b/i, /\bmongo db\b/i],
+      },
+      {
+        name: "Supabase",
+        patterns: [/\bsupabase\b/i],
+      },
+      {
+        name: "Firebase",
+        patterns: [/\bfirebase\b/i],
+      },
+      {
+        name: "REST API",
+        patterns: [
+          /\brest api\b/i,
+          /\brestful api\b/i,
+          /\brestful services\b/i,
+        ],
+      },
+      {
+        name: "GraphQL",
+        patterns: [/\bgraphql\b/i, /\bgraph ql\b/i],
+      },
+  
+      // DevOps and cloud
+      {
+        name: "Git",
+        patterns: [/\bgit\b/i],
+        category: "devops",
+      },
+      {
+        name: "GitHub",
+        patterns: [/\bgithub\b/i, /\bgit hub\b/i],
+        category: "devops",
+      },
+      {
+        name: "Docker",
+        patterns: [/\bdocker\b/i],
+        category: "devops",
+      },
+      {
+        name: "Kubernetes",
+        patterns: [/\bkubernetes\b/i, /\bk8s\b/i],
+        category: "devops",
+      },
+      {
+        name: "AWS",
+        patterns: [/\baws\b/i, /\bamazon web services\b/i],
+        category: "devops",
+      },
+      {
+        name: "Azure",
+        patterns: [/\bazure\b/i],
+        category: "devops",
+      },
+      {
+        name: "Linux",
+        patterns: [/\blinux\b/i],
+        category: "devops",
+      },
+      {
+        name: "CI/CD",
+        patterns: [/\bci cd\b/i, /\bcontinuous integration\b/i],
+        category: "devops",
+      },
+  
+      // Mobile
+      {
+        name: "Flutter",
+        patterns: [/\bflutter\b/i],
+        category: "mobile",
+      },
+      {
+        name: "React Native",
+        patterns: [/\breact native\b/i],
+        category: "mobile",
+      },
+      {
+        name: "Kotlin",
+        patterns: [/\bkotlin\b/i],
+        category: "mobile",
+      },
+      {
+        name: "Swift",
+        patterns: [/\bswift\b/i],
+        category: "mobile",
+      },
+      {
+        name: "Android",
+        patterns: [/\bandroid\b/i],
+        category: "mobile",
+      },
+      {
+        name: "iOS",
+        patterns: [/\bios\b/i],
+        category: "mobile",
+      },
+  
+      // Design
+      {
+        name: "Figma",
+        patterns: [/\bfigma\b/i],
+        category: "ux",
+      },
+      {
+        name: "UI Design",
+        patterns: [/\bui design\b/i, /\buser interface design\b/i],
+        category: "ux",
+      },
+      {
+        name: "UX Design",
+        patterns: [/\bux design\b/i, /\buser experience design\b/i],
+        category: "ux",
+      },
+  
+      // AI and data
+      {
+        name: "Machine Learning",
+        patterns: [/\bmachine learning\b/i],
+      },
+      {
+        name: "Artificial Intelligence",
+        patterns: [/\bartificial intelligence\b/i],
+      },
+      {
+        name: "Data Analysis",
+        patterns: [/\bdata analysis\b/i, /\bdata analytics\b/i],
       },
     ];
+  
+    const detectedDetailedSkills = skillDefinitions
+      .filter((definition) =>
+        definition.patterns.some((pattern) => pattern.test(normalizedText))
+      )
+      .map((definition) => definition.name);
+  
+    /*
+     * ندخل أيضًا مهارات المستخدم إذا كانت مذكورة فعلًا
+     * في عنوان الوظيفة أو وصفها، حتى لو لم تكن بالقائمة السابقة.
+     */
+    const detectedProfileSkills = profileSkills.filter((skill) => {
+      const originalSkill = skill
+        .toLowerCase()
+        .trim()
+        .replace(/[._-]+/g, " ")
+        .replace(/\s+/g, " ");
+  
+      const normalizedProfileSkill = normalizeSkill(skill)
+        .toLowerCase()
+        .replace(/[._-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+  
+      return (
+        originalSkill.length >= 2 &&
+        (normalizedText.includes(originalSkill) ||
+          normalizedText.includes(normalizedProfileSkill))
+      );
+    });
+  
+    const detailedSkills = Array.from(
+      new Map(
+        [...detectedDetailedSkills, ...detectedProfileSkills].map((skill) => [
+          normalizeSkill(skill),
+          skill,
+        ])
+      ).values()
+    );
+  
+    const hasFrontendDetails = skillDefinitions.some(
+      (definition) =>
+        definition.category === "frontend" &&
+        detailedSkills.some(
+          (skill) => normalizeSkill(skill) === normalizeSkill(definition.name)
+        )
+    );
+  
+    const hasBackendDetails = skillDefinitions.some(
+      (definition) =>
+        definition.category === "backend" &&
+        detailedSkills.some(
+          (skill) => normalizeSkill(skill) === normalizeSkill(definition.name)
+        )
+    );
+  
+    const hasMobileDetails = skillDefinitions.some(
+      (definition) =>
+        definition.category === "mobile" &&
+        detailedSkills.some(
+          (skill) => normalizeSkill(skill) === normalizeSkill(definition.name)
+        )
+    );
+  
+    const hasUxDetails = skillDefinitions.some(
+      (definition) =>
+        definition.category === "ux" &&
+        detailedSkills.some(
+          (skill) => normalizeSkill(skill) === normalizeSkill(definition.name)
+        )
+    );
+  
+    const hasDevOpsDetails = skillDefinitions.some(
+      (definition) =>
+        definition.category === "devops" &&
+        detailedSkills.some(
+          (skill) => normalizeSkill(skill) === normalizeSkill(definition.name)
+        )
+    );
+  
+    /*
+     * لا نعرض Frontend أو Backend إذا وجدنا تقنيات مفصلة.
+     * نعرض التصنيف العام فقط عندما لا يوفر الوصف تفاصيل أكثر.
+     */
+    const generalSkills: string[] = [];
+  
+    if (
+      !hasFrontendDetails &&
+      (/\bfrontend\b/i.test(normalizedText) ||
+        /\bfront end\b/i.test(normalizedText))
+    ) {
+      generalSkills.push("Frontend");
+    }
+  
+    if (
+      !hasBackendDetails &&
+      (/\bbackend\b/i.test(normalizedText) ||
+        /\bback end\b/i.test(normalizedText))
+    ) {
+      generalSkills.push("Backend");
+    }
+  
+    if (
+      !hasMobileDetails &&
+      (/\bmobile development\b/i.test(normalizedText) ||
+        /\bmobile developer\b/i.test(normalizedText))
+    ) {
+      generalSkills.push("Mobile Development");
+    }
+  
+    if (
+      !hasUxDetails &&
+      (/\buser experience\b/i.test(normalizedText) ||
+        /\bux\b/i.test(normalizedText))
+    ) {
+      generalSkills.push("UX");
+    }
+  
+    if (
+      !hasDevOpsDetails &&
+      /\bdevops\b/i.test(normalizedText)
+    ) {
+      generalSkills.push("DevOps");
+    }
+  
+    if (
+      /\bapi\b/i.test(normalizedText) &&
+      !detailedSkills.some(
+        (skill) =>
+          normalizeSkill(skill) === normalizeSkill("REST API") ||
+          normalizeSkill(skill) === normalizeSkill("GraphQL")
+      )
+    ) {
+      generalSkills.push("API");
+    }
+  
+    return Array.from(
+      new Map(
+        [...detailedSkills, ...generalSkills].map((skill) => [
+          normalizeSkill(skill),
+          skill,
+        ])
+      ).values()
+    ).slice(0, 10);
+  };
+  const calculateMatch = (
+    skills: string[],
+    requirements: string[]
+  ) => {
+    if (skills.length === 0 || requirements.length === 0) {
+      return 0;
+    }
+  
+    const normalizedSkills = new Set(
+      skills.map((skill) => normalizeSkill(skill))
+    );
+  
+    /*
+     * نضيف التصنيف العام بناءً على المهارات الفعلية للمستخدم.
+     * هذا لا يحذف المهارات الأصلية ولا يعطي توافقًا عشوائيًا.
+     */
+  
+    const frontendSkills = [
+      "react",
+      "javascript",
+      "typescript",
+      "html",
+      "css",
+      "angular",
+      "vue",
+      "next.js",
+    ];
+  
+    const backendSkills = [
+      "node.js",
+      "express",
+      "php",
+      "laravel",
+      "python",
+      "java",
+      "ruby",
+      "ruby on rails",
+      "c#",
+      ".net",
+    ];
+  
+    const uxSkills = [
+      "ux",
+      "ui",
+      "figma",
+      "user experience",
+      "user interface",
+    ];
+  
+    const mobileSkills = [
+      "flutter",
+      "react native",
+      "kotlin",
+      "swift",
+      "android",
+      "ios",
+    ];
+  
+    const devOpsSkills = [
+      "docker",
+      "kubernetes",
+      "linux",
+      "aws",
+      "terraform",
+      "ci/cd",
+    ];
+  
+    const hasAnySkill = (skillGroup: string[]) =>
+      skillGroup.some((skill) =>
+        normalizedSkills.has(normalizeSkill(skill))
+      );
+  
+    if (hasAnySkill(frontendSkills)) {
+      normalizedSkills.add("frontend");
+    }
+  
+    if (hasAnySkill(backendSkills)) {
+      normalizedSkills.add("backend");
+    }
+  
+    if (hasAnySkill(uxSkills)) {
+      normalizedSkills.add("ux");
+      normalizedSkills.add("ui");
+    }
+  
+    if (hasAnySkill(mobileSkills)) {
+      normalizedSkills.add("mobile");
+    }
+  
+    if (hasAnySkill(devOpsSkills)) {
+      normalizedSkills.add("devops");
+    }
+  
+    const normalizedRequirements = Array.from(
+      new Set(
+        requirements.map((requirement) =>
+          normalizeSkill(requirement)
+        )
+      )
+    );
+  
+    const matchedRequirements = normalizedRequirements.filter(
+      (requirement) => normalizedSkills.has(requirement)
+    );
+  
+    return Math.round(
+      (matchedRequirements.length /
+        normalizedRequirements.length) *
+        100
+    );
   };
 
   useEffect(() => {
-    const loadAIJobs = async () => {
+    const loadJobs = async () => {
       setIsLoading(true);
 
       try {
@@ -119,18 +668,11 @@ export function JobMatching() {
           return;
         }
 
-        const { data: profile, error: profileError } = await supabase
+        const { data: profile } = await supabase
           .from("profile")
           .select("skills")
           .eq("user_id", user.id)
           .maybeSingle();
-
-        if (profileError) {
-          console.error(profileError);
-          toast.error("فشل تحميل مهارات المستخدم");
-          setIsLoading(false);
-          return;
-        }
 
         const skills = profile?.skills
           ? String(profile.skills)
@@ -141,77 +683,83 @@ export function JobMatching() {
 
         setUserSkills(skills);
 
-        if (skills.length === 0) {
-          toast.error("أضيفي مهارات في السيرة الذاتية أولاً");
-          const fallback = getFallbackJobs([]);
-          setJobs(fallback);
-          setFilteredJobs(fallback);
-          setIsLoading(false);
+        const { data: jobsData, error } = await supabase
+          .from("jobs")
+          .select("*");
+
+        if (error) {
+          console.error(error);
+          toast.error("فشل تحميل الوظائف");
           return;
         }
 
-        const { data, error } = await supabase.functions.invoke("suggest-jobs", {
-          body: { skills },
+        const finalJobs: Job[] = (jobsData || []).map((job) => {
+          const cleanDescription = cleanText(job.description || "");
+          const requirements = extractRequirements(
+            `${job.title || ""} ${job.requirements || ""} ${cleanDescription}`
+          );
+
+          return {
+            id: String(job.id),
+            title: job.title || "وظيفة بدون عنوان",
+            company: job.company || "شركة غير محددة",
+            location: normalizeLocation(job.location || ""),
+            salary: job.salary || "غير محدد",
+            type: job.type || "دوام كامل",
+            experience: normalizeExperience(job.title || "", cleanDescription),
+            description: cleanDescription.slice(0, 300) + "...",
+            requirements,
+            matchPercentage: calculateMatch(
+              skills,
+              requirements
+            ),
+            postedDate: job.posted_date || "غير محدد",
+            url: job.url,
+          };
         });
-        if (error) {
-          console.error("AI function error:", error);
-        
-          const context = (error as any).context;
-          if (context) {
-            const errorText = await context.text();
-            console.error("AI function real error:", errorText);
-          }
-        
-          throw new Error(error.message);
-        }
-        const aiJobs = Array.isArray(data)
-          ? data
-          : Array.isArray(data?.jobs)
-          ? data.jobs
-          : [];
+        console.table(
+          finalJobs.map((job) => ({
+            title: job.title,
+            requirements: job.requirements.join(", "),
+            matchPercentage: job.matchPercentage,
+          }))
+        );
 
-        if (aiJobs.length === 0) {
-          throw new Error("AI returned empty jobs");
-        }
 
-        const normalizedJobs = normalizeAIJobs(aiJobs);
-
-        setJobs(normalizedJobs);
-        setFilteredJobs(normalizedJobs);
+        const matchedJobs = finalJobs
+        .filter((job) => job.matchPercentage > 0)
+        .sort((a, b) => b.matchPercentage - a.matchPercentage);
+      
+      setJobs(matchedJobs);
+      setFilteredJobs(matchedJobs);
       } catch (error) {
-        console.error("AI jobs error:", error);
-        toast.error("تعذر جلب الوظائف من AI، تم عرض اقتراحات احتياطية");
-
-        const fallback = getFallbackJobs(userSkills);
-        setJobs(fallback);
-        setFilteredJobs(fallback);
+        console.error("Jobs error:", error);
+        toast.error("حدث خطأ أثناء تحميل الوظائف");
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadAIJobs();
-  }, [user]);
-
+    loadJobs();
+  }, [user, location.key]);
   useEffect(() => {
     let filtered = jobs;
 
-    if (searchQuery) {
+    if (searchQuery.trim()) {
       filtered = filtered.filter(
         (job) =>
           job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          job.company.toLowerCase().includes(searchQuery.toLowerCase())
+          job.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          job.description.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
-    if (cityFilter !== "all") {
-      filtered = filtered.filter((job) => job.location === cityFilter);
+    if (locationFilter !== "all") {
+      filtered = filtered.filter((job) => job.location === locationFilter);
     }
 
     if (experienceFilter !== "all") {
-      filtered = filtered.filter((job) =>
-        job.experience.includes(experienceFilter)
-      );
+      filtered = filtered.filter((job) => job.experience === experienceFilter);
     }
 
     filtered = [...filtered].sort(
@@ -219,10 +767,60 @@ export function JobMatching() {
     );
 
     setFilteredJobs(filtered);
-  }, [searchQuery, cityFilter, experienceFilter, jobs]);
+  }, [searchQuery, locationFilter, experienceFilter, jobs]);
+
+  const handleViewDetails = (jobId: string) => {
+    navigate(`/jobs/${encodeURIComponent(jobId)}`);
+  };
 
   const handleApply = (job: Job) => {
-    toast.success(`تم التقديم على وظيفة ${job.title} بنجاح!`);
+    if (job.url) {
+      window.open(job.url, "_blank");
+    } else {
+      toast.error("لا يوجد رابط تقديم لهذه الوظيفة");
+    }
+  };
+
+  const handleSaveJob = async (job: Job) => {
+    if (!user) {
+      toast.error("يجب تسجيل الدخول أولاً");
+      return;
+    }
+
+    const { data: existingJob } = await supabase
+      .from("saved_jobs")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("job_id", job.id)
+      .maybeSingle();
+
+    if (existingJob) {
+      toast.info("هذه الوظيفة محفوظة مسبقًا");
+      return;
+    }
+
+    const { error } = await supabase.from("saved_jobs").insert({
+      user_id: user.id,
+      job_id: job.id,
+      url: job.url || null,
+      title: job.title,
+      company: job.company,
+      location: job.location,
+      salary: job.salary,
+      type: job.type,
+      experience: job.experience,
+      description: job.description,
+      requirements: job.requirements.join(", "),
+      match_percentage: job.matchPercentage,
+      posted_date: job.postedDate,
+    });
+
+    if (error) {
+      console.error(error);
+      toast.error("فشل حفظ الوظيفة");
+    } else {
+      toast.success("تم حفظ الوظيفة بنجاح ✅");
+    }
   };
 
   const getMatchColor = (percentage: number) => {
@@ -239,8 +837,9 @@ export function JobMatching() {
             <Briefcase className="w-10 h-10 text-blue-600" />
             الوظائف المتاحة
           </h1>
+
           <p className="text-gray-600">
-            اكتشف أفضل الفرص الوظيفية المناسبة لمهاراتك باستخدام AI
+            اكتشف أفضل الفرص الوظيفية المناسبة لمهاراتك
           </p>
         </div>
 
@@ -249,6 +848,7 @@ export function JobMatching() {
             <p className="font-bold text-gray-900 mb-2">
               مهاراتك المستخدمة في التحليل:
             </p>
+
             <div className="flex flex-wrap gap-2">
               {userSkills.length > 0 ? (
                 userSkills.map((skill, index) => (
@@ -264,8 +864,8 @@ export function JobMatching() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="md:col-span-2">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
               <div className="relative">
                 <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                 <Input
@@ -277,32 +877,23 @@ export function JobMatching() {
               </div>
             </div>
 
-            <Select value={cityFilter} onValueChange={setCityFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="المدينة" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">جميع المدن</SelectItem>
-                <SelectItem value="Remote">Remote</SelectItem>
-                <SelectItem value="الرياض">الرياض</SelectItem>
-                <SelectItem value="جدة">جدة</SelectItem>
-                <SelectItem value="الدمام">الدمام</SelectItem>
-                <SelectItem value="الخبر">الخبر</SelectItem>
-              </SelectContent>
-            </Select>
+            <select
+  value={locationFilter}
+  onChange={(e) => setLocationFilter(e.target.value)}
+  className="border rounded-md px-3 py-2"
+>
+  <option value="all">جميع المواقع</option>
+</select>
 
-            <Select value={experienceFilter} onValueChange={setExperienceFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="سنوات الخبرة" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">جميع المستويات</SelectItem>
-                <SelectItem value="مبتدئ">مبتدئ</SelectItem>
-                <SelectItem value="متوسط">متوسط</SelectItem>
-                <SelectItem value="3-5">3-5 سنوات</SelectItem>
-                <SelectItem value="5+">5+ سنوات</SelectItem>
-              </SelectContent>
-            </Select>
+            <select
+              value={experienceFilter}
+              onChange={(e) => setExperienceFilter(e.target.value)}
+              className="border rounded-md px-3 py-2"
+            >
+             <option value="all">جميع المستويات</option>
+<option value="مبتدئ">مبتدئ</option>
+<option value="متقدم">متقدم</option>
+            </select>
           </div>
         </Card>
 
@@ -315,42 +906,17 @@ export function JobMatching() {
 
           <Badge variant="secondary" className="gap-2">
             <Filter className="w-4 h-4" />
-            مرتبة حسب توافق AI
+            مرتبة حسب نسبة التوافق
           </Badge>
         </div>
 
         <div className="space-y-6">
           {isLoading ? (
             Array.from({ length: 5 }).map((_, index) => (
-              <Card key={index} className="p-6 hover:shadow-lg transition-shadow">
-                <div className="flex flex-col lg:flex-row gap-6">
-                  <div className="flex-1">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <Skeleton className="w-3/4 h-7 mb-3" />
-                        <Skeleton className="w-1/2 h-5" />
-                      </div>
-                      <Skeleton className="w-20 h-16" />
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                      <Skeleton className="w-full h-5" />
-                      <Skeleton className="w-full h-5" />
-                      <Skeleton className="w-full h-5" />
-                      <Skeleton className="w-full h-5" />
-                    </div>
-
-                    <Skeleton className="w-full h-5 mb-2" />
-                    <Skeleton className="w-full h-5 mb-2" />
-                    <Skeleton className="w-2/3 h-5" />
-                  </div>
-
-                  <div className="flex flex-col gap-3 lg:w-48">
-                    <Skeleton className="w-full h-10" />
-                    <Skeleton className="w-full h-10" />
-                    <Skeleton className="w-full h-10" />
-                  </div>
-                </div>
+              <Card key={index} className="p-6">
+                <Skeleton className="w-3/4 h-7 mb-3" />
+                <Skeleton className="w-1/2 h-5 mb-4" />
+                <Skeleton className="w-full h-5 mb-2" />
               </Card>
             ))
           ) : (
@@ -359,7 +925,7 @@ export function JobMatching() {
                 <div className="flex flex-col lg:flex-row gap-6">
                   <div className="flex-1">
                     <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
+                      <div>
                         <h3 className="text-2xl font-bold text-gray-900 mb-2">
                           {job.title}
                         </h3>
@@ -376,7 +942,7 @@ export function JobMatching() {
                         )}`}
                       >
                         {job.matchPercentage}%
-                        <div className="text-xs font-normal">توافق AI</div>
+                        <div className="text-xs font-normal">توافق</div>
                       </div>
                     </div>
 
@@ -408,52 +974,49 @@ export function JobMatching() {
 
                     <div className="mb-4">
                       <h4 className="font-bold text-gray-900 mb-2">
-                        المتطلبات:
+                        المهارات المطلوبة:
                       </h4>
 
                       <div className="flex flex-wrap gap-2">
-                        {job.requirements.map((req, index) => {
-                          const hasSkill = userSkills.some((skill) =>
-                            skill.toLowerCase().includes(req.toLowerCase())
-                          );
-
-                          return (
-                            <Badge
-                              key={index}
-                              className={
-                                hasSkill
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-gray-100 text-gray-700"
-                              }
-                            >
-                              {req}
-                              {hasSkill && " ✓"}
-                            </Badge>
-                          );
-                        })}
+                        {job.requirements.map((req, index) => (
+                          <Badge key={index} variant="secondary">
+                            {req}
+                          </Badge>
+                        ))}
                       </div>
                     </div>
 
                     <Badge variant="secondary" className="gap-2">
                       <TrendingUp className="w-3 h-3" />
-                      خبرة مطلوبة: {job.experience}
+                      المستوى: {job.experience}
                     </Badge>
                   </div>
 
-                  <div className="flex flex-col gap-3 lg:w-48">
-                    <Button onClick={() => handleApply(job)} className="w-full gap-2">
-                      تقديم الآن
-                      <ExternalLink className="w-4 h-4" />
-                    </Button>
+             <div className="flex flex-col gap-3 lg:w-48">
+  <Button
+    className="w-full"
+    onClick={() => handleViewDetails(job.id)}
+  >
+    عرض التفاصيل
+  </Button>
 
-                    <Button variant="outline" className="w-full">
-                      حفظ الوظيفة
-                    </Button>
+  <Button
+    variant="outline"
+    onClick={() => handleApply(job)}
+    className="w-full gap-2"
+  >
+    تقديم الآن
+    <ExternalLink className="w-4 h-4" />
+  </Button>
 
-                    <Button variant="ghost" className="w-full">
-                      عرض التفاصيل
-                    </Button>
-                  </div>
+  <Button
+    variant="outline"
+    className="w-full"
+    onClick={() => handleSaveJob(job)}
+  >
+    حفظ الوظيفة
+  </Button>
+</div>
                 </div>
               </Card>
             ))
@@ -463,11 +1026,13 @@ export function JobMatching() {
         {filteredJobs.length === 0 && !isLoading && (
           <Card className="p-12 text-center">
             <Briefcase className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+
             <h3 className="text-xl font-bold text-gray-900 mb-2">
               لا توجد وظائف مطابقة
             </h3>
+
             <p className="text-gray-600">
-              جرب تعديل معايير البحث أو أضف مهارات أكثر في السيرة الذاتية
+              جربي تغيير البحث أو الفلاتر
             </p>
           </Card>
         )}
@@ -475,3 +1040,4 @@ export function JobMatching() {
     </div>
   );
 }
+

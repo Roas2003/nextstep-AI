@@ -48,10 +48,11 @@ export function Navigation() {
     setLogoutDialogOpen(true);
   };
 
-  const confirmLogout = () => {
-    logout();
+  const confirmLogout = async () => {
+    await logout();
     setLogoutDialogOpen(false);
-    navigate("/login");
+    setMobileMenuOpen(false);
+    navigate("/login", { replace: true });
   };
 
   const getInitials = (name: string) => {
@@ -98,7 +99,16 @@ export function Navigation() {
                 </Link>
               );
             })}
-            
+            {user && (
+  <Button
+    variant="ghost"
+    onClick={handleLogout}
+    className="gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+  >
+    <LogOut className="w-4 h-4" />
+    تسجيل الخروج
+  </Button>
+)}
             {/* User Menu */}
             {user && (
               <DropdownMenu>

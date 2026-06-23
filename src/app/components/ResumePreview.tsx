@@ -21,11 +21,11 @@ interface ResumeData {
     phone: string;
     location: string;
     summary: string;
+    photo?: string;
   };
   experiences: Experience[];
   education: Education[];
   skills: string[];
-  theme: "blue" | "green" | "purple";
 }
 
 interface ResumePreviewProps {
@@ -33,128 +33,208 @@ interface ResumePreviewProps {
 }
 
 export function ResumePreview({ data }: ResumePreviewProps) {
-  const themeColors = {
-    blue: {
-      primary: "bg-blue-600",
-      light: "bg-blue-50",
-      text: "text-blue-600",
-      border: "border-blue-600"
-    },
-    green: {
-      primary: "bg-green-600",
-      light: "bg-green-50",
-      text: "text-green-600",
-      border: "border-green-600"
-    },
-    purple: {
-      primary: "bg-purple-600",
-      light: "bg-purple-50",
-      text: "text-purple-600",
-      border: "border-purple-600"
-    }
-  };
-
-  const theme = themeColors[data.theme];
-
   return (
-    <div id="resume-preview" className="bg-white p-8 shadow-lg" style={{ fontFamily: "Arial, sans-serif" }}>
-      {/* Header */}
-      <div className={`${theme.primary} text-white p-8 rounded-t-lg -mx-8 -mt-8 mb-6`}>
-        <h1 className="text-4xl font-bold mb-2">{data.personalInfo.name || "الاسم"}</h1>
-        <p className="text-xl opacity-90">{data.personalInfo.title || "المسمى الوظيفي"}</p>
-        <div className="flex flex-wrap gap-4 mt-4 text-sm">
-          {data.personalInfo.email && (
-            <div className="flex items-center gap-2">
-              <span>📧</span>
-              <span>{data.personalInfo.email}</span>
-            </div>
-          )}
-          {data.personalInfo.phone && (
-            <div className="flex items-center gap-2">
-              <span>📱</span>
-              <span>{data.personalInfo.phone}</span>
-            </div>
-          )}
-          {data.personalInfo.location && (
-            <div className="flex items-center gap-2">
-              <span>📍</span>
-              <span>{data.personalInfo.location}</span>
-            </div>
-          )}
-        </div>
+    <div
+      id="resume-preview"
+      className="w-[794px] min-h-[1123px] mx-auto bg-white overflow-hidden relative shadow-2xl"
+      style={{
+        fontFamily: "Poppins, sans-serif",
+      }}
+    >
+      {/* Background */}
+      <div className="absolute inset-0 bg-[#fefefe]" />
+
+      {/* Decorations */}
+      <div className="absolute top-6 left-8 text-5xl text-[#f8de73]">
+        ☀
       </div>
 
-      {/* Summary */}
-      {data.personalInfo.summary && (
-        <div className="mb-6">
-          <h2 className={`text-2xl font-bold ${theme.text} mb-3 pb-2 border-b-2 ${theme.border}`}>
-            نبذة تعريفية
-          </h2>
-          <p className="text-gray-700 leading-relaxed">{data.personalInfo.summary}</p>
-        </div>
-      )}
+      <div className="absolute bottom-8 right-10 text-6xl text-[#f4a697] rotate-12">
+        ❦
+      </div>
 
-      {/* Experience */}
-      {data.experiences.length > 0 && (
-        <div className="mb-6">
-          <h2 className={`text-2xl font-bold ${theme.text} mb-3 pb-2 border-b-2 ${theme.border}`}>
-            الخبرات العملية
-          </h2>
-          <div className="space-y-4">
-            {data.experiences.map((exp) => (
-              <div key={exp.id}>
-                <div className="flex justify-between items-start mb-1">
-                  <h3 className="text-xl font-bold text-gray-900">{exp.title}</h3>
-                  <span className="text-sm text-gray-600">{exp.period}</span>
+      <div className="grid grid-cols-3 relative z-10 min-h-[1123px]">
+
+        {/* LEFT SIDEBAR */}
+        <div className="bg-[#fff9f7] p-8 border-r border-[#f0dede]">
+
+          {/* Avatar */}
+          <div className="flex justify-center mb-10">
+            <div className="w-40 h-40 rounded-full overflow-hidden bg-[#f8d4cd] shadow-md">
+
+              {data.personalInfo.photo ? (
+                <img
+                  src={data.personalInfo.photo}
+                  alt="Profile"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-7xl text-white">
+                  👤
                 </div>
-                <p className={`${theme.text} font-semibold mb-2`}>{exp.company}</p>
-                <p className="text-gray-700 whitespace-pre-line">{exp.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+              )}
 
-      {/* Education */}
-      {data.education.length > 0 && (
-        <div className="mb-6">
-          <h2 className={`text-2xl font-bold ${theme.text} mb-3 pb-2 border-b-2 ${theme.border}`}>
-            المؤهلات الدراسية
-          </h2>
-          <div className="space-y-3">
-            {data.education.map((edu) => (
-              <div key={edu.id}>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-900">{edu.degree}</h3>
-                    <p className="text-gray-700">{edu.institution}</p>
+            </div>
+          </div>
+
+          {/* Contact */}
+          <div className="mb-10">
+            <h2 className="text-[#7db7e7] font-extrabold text-2xl mb-5">
+              Contact
+            </h2>
+
+            <div className="space-y-4 text-gray-700 text-sm leading-7">
+              <p>{data.personalInfo.phone || "+123 456 7890"}</p>
+
+              <p>
+                {data.personalInfo.email || "your@email.com"}
+              </p>
+
+              <p>
+                {data.personalInfo.location || "Your Location"}
+              </p>
+            </div>
+          </div>
+
+          {/* Skills */}
+          <div className="mb-10">
+            <h2 className="text-[#7db7e7] font-extrabold text-2xl mb-5">
+              Skills
+            </h2>
+
+            <div className="flex flex-wrap gap-3">
+              {data.skills.length > 0 ? (
+                data.skills.map((skill, index) => (
+                  <div
+                    key={index}
+                    className="bg-[#f8d4cd] text-gray-700 px-4 py-2 rounded-full text-sm shadow-sm"
+                  >
+                    {skill}
                   </div>
-                  <span className="text-sm text-gray-600">{edu.year}</span>
-                </div>
-              </div>
-            ))}
+                ))
+              ) : (
+                <p className="text-gray-400 text-sm">
+                  No skills added
+                </p>
+              )}
+            </div>
           </div>
-        </div>
-      )}
 
-      {/* Skills */}
-      {data.skills.length > 0 && (
-        <div className="mb-6">
-          <h2 className={`text-2xl font-bold ${theme.text} mb-3 pb-2 border-b-2 ${theme.border}`}>
-            المهارات
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {data.skills.map((skill, index) => (
-              <span
-                key={index}
-                className={`${theme.light} ${theme.text} px-4 py-2 rounded-full font-semibold`}
-              >
-                {skill}
-              </span>
-            ))}
+          {/* Summary */}
+          <div>
+            <h2 className="text-[#7db7e7] font-extrabold text-2xl mb-5">
+              Profile
+            </h2>
+
+            <p className="text-gray-600 text-sm leading-8 whitespace-pre-line">
+              {data.personalInfo.summary ||
+                "Write a short professional summary about yourself."}
+            </p>
           </div>
         </div>
-      )}
+
+        {/* RIGHT CONTENT */}
+        <div className="col-span-2 p-12 bg-white relative">
+
+          {/* Header */}
+          <div className="mb-16">
+            <h1 className="text-5xl font-extrabold text-[#8bbfe5] mb-3 leading-tight">
+              {data.personalInfo.name || "Name Surname"}
+            </h1>
+
+            <p className="text-2xl text-[#8dc7b8] font-semibold">
+              {data.personalInfo.title || "Professional Title"}
+            </p>
+          </div>
+
+          {/* Experience */}
+          <div className="mb-14">
+            <h2 className="text-3xl font-bold text-[#7db7e7] mb-8">
+              Work Experience
+            </h2>
+
+            <div className="space-y-10">
+              {data.experiences.length > 0 ? (
+                data.experiences.map((exp) => (
+                  <div
+                    key={exp.id}
+                    className="bg-[#8fc0ec] rounded-[40px] p-8 text-white shadow-lg"
+                  >
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h3 className="text-2xl font-bold">
+                          {exp.title || "Job Position"}
+                        </h3>
+
+                        <p className="text-white/90 font-medium mt-1">
+                          {exp.company || "Company Name"}
+                        </p>
+                      </div>
+
+                      <span className="text-sm text-white/90">
+                        {exp.period || "2024 - 2026"}
+                      </span>
+                    </div>
+
+                    <p className="leading-8 text-sm whitespace-pre-line">
+                      {exp.description ||
+                        "Write your job responsibilities and achievements here."}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <div className="bg-[#8fc0ec] rounded-[40px] p-8 text-white shadow-lg">
+                  <h3 className="text-2xl font-bold mb-3">
+                    No Experience Added
+                  </h3>
+
+                  <p className="leading-8 text-sm">
+                    Add your work experience from the form.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Education */}
+          <div>
+            <h2 className="text-3xl font-bold text-[#7db7e7] mb-8">
+              Education
+            </h2>
+
+            <div className="space-y-8">
+              {data.education.length > 0 ? (
+                data.education.map((edu) => (
+                  <div
+                    key={edu.id}
+                    className="border-l-4 border-[#8dc7b8] pl-5"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="text-xl font-bold text-gray-800">
+                          {edu.degree || "Degree"}
+                        </h3>
+
+                        <p className="text-[#8dc7b8] font-medium mt-1">
+                          {edu.institution || "University Name"}
+                        </p>
+                      </div>
+
+                      <span className="text-sm text-gray-500">
+                        {edu.year || "2026"}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-gray-400">
+                  No education added
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

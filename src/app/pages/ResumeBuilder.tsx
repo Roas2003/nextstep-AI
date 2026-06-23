@@ -6,15 +6,13 @@ import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { Progress } from "../components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { Plus, Trash2, Download, Eye, Palette } from "lucide-react";
+import { Plus, Trash2, Download, Eye } from "lucide-react";
 import { ResumePreview } from "../components/ResumePreview";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
-
 interface Experience {
   id: string;
   title: string;
@@ -22,14 +20,95 @@ interface Experience {
   period: string;
   description: string;
 }
+const parseExperiences = (value: unknown): Experience[] => {
+  if (!value) return [];
 
+  if (Array.isArray(value)) {
+    return value.map((item, index) => ({
+      id: item?.id || `${Date.now()}-${index}`,
+      title: String(item?.title || ""),
+      company: String(item?.company || ""),
+      period: String(item?.period || ""),
+      description: String(item?.description || ""),
+    }));
+  }
+
+  const savedValue = String(value).trim();
+
+  if (!savedValue) return [];
+
+  try {
+    const parsed = JSON.parse(savedValue);
+
+    if (Array.isArray(parsed)) {
+      return parsed.map((item, index) => ({
+        id: item?.id || `${Date.now()}-${index}`,
+        title: String(item?.title || ""),
+        company: String(item?.company || ""),
+        period: String(item?.period || ""),
+        description: String(item?.description || ""),
+      }));
+    }
+  } catch {
+    // البيانات القديمة كانت محفوظة كنص واحد
+  }
+
+  return [
+    {
+      id: Date.now().toString(),
+      title: "",
+      company: "",
+      period: "",
+      description: savedValue,
+    },
+  ];
+};
 interface Education {
   id: string;
   degree: string;
   institution: string;
   year: string;
 }
+const parseEducation = (value: unknown): Education[] => {
+  if (!value) return [];
 
+  if (Array.isArray(value)) {
+    return value.map((item, index) => ({
+      id: item?.id || `${Date.now()}-${index}`,
+      degree: String(item?.degree || ""),
+      institution: String(item?.institution || ""),
+      year: String(item?.year || ""),
+    }));
+  }
+
+  const savedValue = String(value).trim();
+
+  if (!savedValue) return [];
+
+  try {
+    const parsed = JSON.parse(savedValue);
+
+    if (Array.isArray(parsed)) {
+      return parsed.map((item, index) => ({
+        id: item?.id || `${Date.now()}-${index}`,
+        degree: String(item?.degree || ""),
+        institution: String(item?.institution || ""),
+        year: String(item?.year || ""),
+      }));
+    }
+  } catch {
+    // البيانات القديمة كانت محفوظة كنص واحد
+  }
+
+  return [
+    {
+      id: Date.now().toString(),
+      degree: savedValue,
+      institution: "",
+      year: "",
+    },
+  ];
+};
 interface ResumeData {
   personalInfo: {
     name: string;
@@ -38,6 +117,7 @@ interface ResumeData {
     phone: string;
     location: string;
     summary: string;
+    photo?: string;
   };
   experiences: Experience[];
   education: Education[];
@@ -54,9 +134,11 @@ const emptyResumeData: ResumeData = {
     location: "",
     summary: "",
   },
+
   experiences: [],
   education: [],
   skills: [],
+  image: "",
   theme: "blue",
 };
 
@@ -83,13 +165,12 @@ export function ResumeBuilder() {
           title: "Frontend Developer",
           summary:
             prev.personalInfo.summary ||
-            "مطور واجهات أمامية مهتم ببناء واجهات مستخدم تفاعلية وسهلة الاستخدام باستخدام React و JavaScript.",
+            "Frontend developer interested in building interactive and user-friendly interfaces using React and JavaScript.",
         },
         skills: Array.from(
           new Set([...prev.skills, "React", "JavaScript", "HTML", "CSS"])
         ),
       }));
-      toast.success("تم تحسين السيرة لوظيفة Frontend Developer");
       return;
     }
 
@@ -101,13 +182,12 @@ export function ResumeBuilder() {
           title: "Backend Developer",
           summary:
             prev.personalInfo.summary ||
-            "مطور خلفيات مهتم ببناء APIs وربط التطبيقات بقواعد البيانات بشكل آمن ومنظم.",
+            "Backend developer interested in building APIs and connecting applications with databases securely.",
         },
         skills: Array.from(
           new Set([...prev.skills, "Node.js", "API", "Database", "Supabase"])
         ),
       }));
-      toast.success("تم تحسين السيرة لوظيفة Backend Developer");
       return;
     }
 
@@ -119,7 +199,7 @@ export function ResumeBuilder() {
           title: "UI/UX Designer",
           summary:
             prev.personalInfo.summary ||
-            "مصمم واجهات وتجربة مستخدم يهتم بتصميم حلول سهلة الاستخدام وجذابة بصريًا.",
+            "UI/UX designer interested in creating simple, usable, and visually attractive digital experiences.",
         },
         skills: Array.from(
           new Set([
@@ -131,7 +211,6 @@ export function ResumeBuilder() {
           ])
         ),
       }));
-      toast.success("تم تحسين السيرة لوظيفة UI/UX Designer");
       return;
     }
 
@@ -146,7 +225,6 @@ export function ResumeBuilder() {
       ),
     }));
 
-    toast.success("تم تحسين السيرة لوظيفة Junior Developer");
   };
 
   useEffect(() => {
@@ -175,27 +253,8 @@ export function ResumeBuilder() {
             location: data.location || "",
             summary: data.summary || "",
           },
-          experiences: data.experience
-            ? [
-                {
-                  id: Date.now().toString(),
-                  title: "",
-                  company: "",
-                  period: "",
-                  description: String(data.experience),
-                },
-              ]
-            : [],
-          education: data.education
-            ? [
-                {
-                  id: Date.now().toString(),
-                  degree: String(data.education),
-                  institution: "",
-                  year: "",
-                },
-              ]
-            : [],
+          experiences: parseExperiences(data.experience),
+            education: parseEducation(data.education),
           skills: data.skills
             ? String(data.skills)
                 .split(",")
@@ -220,13 +279,15 @@ export function ResumeBuilder() {
   }, [user]);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      if (resumeData.personalInfo.name) {
+    if (!user) return;
+  
+    const timer = setTimeout(() => {
+      if (resumeData.personalInfo.name.trim()) {
         saveResume(true);
       }
-    }, 30000);
-
-    return () => clearInterval(timer);
+    }, 1500);
+  
+    return () => clearTimeout(timer);
   }, [resumeData, user]);
 
   useEffect(() => {
@@ -285,14 +346,23 @@ export function ResumeBuilder() {
       location: resumeData.personalInfo.location,
       summary: resumeData.personalInfo.summary,
       skills: resumeData.skills.join(","),
-      education: resumeData.education
-        .map((e) => `${e.degree} ${e.institution} ${e.year}`.trim())
-        .join(", "),
-      experience: resumeData.experiences
-        .map((e) =>
-          `${e.title} ${e.company} ${e.period} ${e.description}`.trim()
-        )
-        .join(", "),
+      education: JSON.stringify(
+        resumeData.education.map((education) => ({
+          id: education.id,
+          degree: education.degree.trim(),
+          institution: education.institution.trim(),
+          year: education.year.trim(),
+        }))
+      ),
+      experience: JSON.stringify(
+        resumeData.experiences.map((experience) => ({
+          id: experience.id,
+          title: experience.title.trim(),
+          company: experience.company.trim(),
+          period: experience.period.trim(),
+          description: experience.description.trim(),
+        }))
+      ),
       theme: resumeData.theme,
     };
 
@@ -420,65 +490,50 @@ export function ResumeBuilder() {
     });
   };
 
+  const addNewPageIfNeeded = (pdf: jsPDF, y: number) => {
+    if (y > 270) {
+      pdf.addPage();
+      return 20;
+    }
+    return y;
+  };
+
   const exportToPDF = async () => {
     try {
       toast.loading("جاري إنشاء ملف PDF...");
-
-      const element = document.getElementById("resume-preview-pdf");
-
+  
+      // افتح المعاينة مؤقتاً
+      setShowPreview(true);
+  
+      // استنى شوي لحتى يرندر العنصر
+      await new Promise((resolve) => setTimeout(resolve, 500));
+  
+      const element = document.getElementById("resume-preview");
+  
       if (!element) {
         toast.dismiss();
-        toast.error("لم يتم العثور على السيرة الذاتية");
+        toast.error("لم يتم العثور على المعاينة");
         return;
       }
-
-      const allElements = element.querySelectorAll("*");
-
-      allElements.forEach((el) => {
-        const htmlEl = el as HTMLElement;
-        htmlEl.style.color = "#111827";
-        htmlEl.style.backgroundColor =
-          htmlEl.tagName === "DIV" ? "#ffffff" : "";
-        htmlEl.style.borderColor = "#e5e7eb";
-        htmlEl.style.boxShadow = "none";
-      });
-
-      element.style.backgroundColor = "#ffffff";
-      element.style.color = "#111827";
-
+        const html2canvas = (await import("html2canvas-pro")).default;
+  
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
-        logging: false,
         backgroundColor: "#ffffff",
       });
-
+  
       const imgData = canvas.toDataURL("image/png");
-
-      const pdf = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4",
-      });
-
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-
-      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
-
-      const finalWidth = imgWidth * ratio;
-      const finalHeight = imgHeight * ratio;
-
-      const x = (pdfWidth - finalWidth) / 2;
-      const y = 0;
-
-      pdf.addImage(imgData, "PNG", x, y, finalWidth, finalHeight);
-
+  
+      const pdf = new jsPDF("p", "mm", "a4");
+  
+      const pdfWidth = 210;
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+  
+      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+  
       pdf.save(`${resumeData.personalInfo.name || "resume"}.pdf`);
-
+  
       toast.dismiss();
       toast.success("تم تصدير PDF بنجاح ✅");
     } catch (error) {
@@ -555,7 +610,7 @@ export function ResumeBuilder() {
                     </div>
 
                     <div>
-                      <Label htmlFor="title">المسمى الوظيفي</Label>
+                      <Label htmlFor="title">الوظيفة المستهدفة </Label>
                       <Input
                         id="title"
                         value={resumeData.personalInfo.title}
@@ -645,6 +700,34 @@ export function ResumeBuilder() {
                         rows={4}
                       />
                     </div>
+                    <div className="md:col-span-2">
+  <Label htmlFor="photo">الصورة الشخصية</Label>
+
+  <Input
+    id="photo"
+    type="file"
+    accept="image/*"
+    onChange={(e) => {
+      const file = e.target.files?.[0];
+
+      if (!file) return;
+
+      const reader = new FileReader();
+
+      reader.onloadend = () => {
+        setResumeData({
+          ...resumeData,
+          personalInfo: {
+            ...resumeData.personalInfo,
+            photo: reader.result as string,
+          },
+        });
+      };
+
+      reader.readAsDataURL(file);
+    }}
+  />
+</div>
                   </div>
                 </TabsContent>
 
@@ -704,11 +787,7 @@ export function ResumeBuilder() {
                           <Textarea
                             value={exp.description}
                             onChange={(e) =>
-                              updateExperience(
-                                exp.id,
-                                "description",
-                                e.target.value
-                              )
+                              updateExperience(exp.id, "description", e.target.value)
                             }
                             placeholder="اكتب وصف للمهام والإنجازات..."
                             rows={3}
@@ -759,11 +838,7 @@ export function ResumeBuilder() {
                           <Input
                             value={edu.institution}
                             onChange={(e) =>
-                              updateEducation(
-                                edu.id,
-                                "institution",
-                                e.target.value
-                              )
+                              updateEducation(edu.id, "institution", e.target.value)
                             }
                             placeholder="اسم الجامعة"
                           />
@@ -803,7 +878,7 @@ export function ResumeBuilder() {
                       }}
                       placeholder="أضف مهارة"
                     />
-
+                    
                     <Button onClick={addSkill} className="gap-2">
                       <Plus className="w-4 h-4" />
                       إضافة
@@ -866,36 +941,8 @@ export function ResumeBuilder() {
               </Button>
             </Card>
 
-            <Card className="p-6 space-y-4">
-              <h3 className="font-bold text-lg flex items-center gap-2">
-                <Palette className="w-5 h-5" />
-                اختر اللون
-              </h3>
-
-              <div className="grid grid-cols-3 gap-3">
-                {(["blue", "green", "purple"] as const).map((theme) => (
-                  <button
-                    key={theme}
-                    type="button"
-                    onClick={() => setResumeData({ ...resumeData, theme })}
-                    className={`h-16 rounded-lg border-2 transition-all ${
-                      resumeData.theme === theme
-                        ? "border-gray-900 scale-105"
-                        : "border-gray-200"
-                    } ${
-                      theme === "blue"
-                        ? "bg-gradient-to-br from-blue-500 to-blue-600"
-                        : theme === "green"
-                        ? "bg-gradient-to-br from-green-500 to-green-600"
-                        : "bg-gradient-to-br from-purple-500 to-purple-600"
-                    }`}
-                  />
-                ))}
-              </div>
-            </Card>
           </div>
         </div>
-
         {showPreview && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-auto">
@@ -923,21 +970,6 @@ export function ResumeBuilder() {
           />
         )}
 
-        <div
-          id="resume-preview-pdf"
-          style={{
-            position: "absolute",
-            left: "-9999px",
-            top: 0,
-            width: "794px",
-            background: "#ffffff",
-            color: "#111827",
-            padding: "32px",
-          }}
-        >
-          <ResumePreview data={resumeData} />
-        </div>
-
         <div className="mt-8">
           <Progress value={calculateProgress()} className="h-2" />
           <div className="flex justify-between text-sm text-gray-500 mt-2">
@@ -952,3 +984,6 @@ export function ResumeBuilder() {
     </div>
   );
 }
+
+
+

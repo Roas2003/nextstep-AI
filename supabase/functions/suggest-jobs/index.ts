@@ -7,177 +7,94 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-function smartJobs(skills: string[]) {
-  const lower = skills.map((s) => s.toLowerCase());
-
-  const has = (words: string[]) =>
-    lower.some((skill) => words.some((w) => skill.includes(w)));
-
+function fallbackJobs() {
   return [
     {
-      title: has(["react"])
-        ? "React Frontend Developer"
-        : "Frontend Developer",
+      title: "Frontend Developer",
       company: "AI Career Assistant",
       location: "Remote",
-      salary: "حسب الخبرة",
-      type: "دوام كامل",
-      experience: "مبتدئ - متوسط",
-      matchPercentage: has([
-        "react",
-        "javascript",
-        "html",
-        "css",
-      ])
-        ? 94
-        : 75,
-      postedDate: "AI Recommendation",
-      description:
-        "تم اقتراح هذه الوظيفة بعد تحليل مهارات المستخدم ومقارنتها بمتطلبات وظائف تطوير الواجهات.",
-      requirements: [
-        "React",
-        "JavaScript",
-        "HTML",
-        "CSS",
-        "Git",
-      ],
-    },
-
-    {
-      title: "Full Stack Developer",
-      company: "AI Career Assistant",
-      location: "Hybrid",
-      salary: "حسب الخبرة",
-      type: "دوام كامل",
-      experience: "متوسط",
-      matchPercentage: has([
-        "react",
-        "node",
-        "database",
-        "supabase",
-      ])
-        ? 90
-        : 72,
-      postedDate: "AI Recommendation",
-      description:
-        "اقتراح مناسب للمستخدمين الذين يجمعون بين مهارات الواجهة الأمامية وقواعد البيانات.",
-      requirements: [
-        "React",
-        "Node.js",
-        "Database",
-        "API",
-        "Supabase",
-      ],
-    },
-
-    {
-      title: "Backend Developer",
-      company: "AI Career Assistant",
-      location: "Remote",
-      salary: "حسب الخبرة",
-      type: "دوام كامل",
-      experience: "مبتدئ - متوسط",
-      matchPercentage: has([
-        "sql",
-        "database",
-        "api",
-        "supabase",
-        "php",
-      ])
-        ? 88
-        : 68,
-      postedDate: "AI Recommendation",
-      description:
-        "تم اقتراح هذه الوظيفة بناءً على مهارات قواعد البيانات وربط الأنظمة والخدمات الخلفية.",
-      requirements: [
-        "SQL",
-        "Database",
-        "API",
-        "Supabase",
-      ],
-    },
-
-    {
-      title: "UI/UX Designer",
-      company: "AI Career Assistant",
-      location: "Remote",
-      salary: "حسب الخبرة",
-      type: "دوام جزئي / تدريب",
-      experience: "مبتدئ",
-      matchPercentage: has([
-        "figma",
-        "design",
-        "ui",
-        "ux",
-      ])
-        ? 86
-        : 62,
-      postedDate: "AI Recommendation",
-      description:
-        "اقتراح مناسب إذا كان لدى المستخدم مهارات تصميم واجهات وتجربة مستخدم.",
-      requirements: [
-        "Figma",
-        "UI Design",
-        "UX Research",
-        "Prototyping",
-      ],
-    },
-
-    {
-      title: "Junior Software Developer",
-      company: "AI Career Assistant",
-      location: "On-site",
       salary: "حسب الخبرة",
       type: "دوام كامل",
       experience: "مبتدئ",
-      matchPercentage: 78,
-      postedDate: "AI Recommendation",
-      description:
-        "وظيفة مناسبة للخريجين الجدد كبداية في مجال البرمجة وتطوير الأنظمة.",
-      requirements: [
-        "Problem Solving",
-        "Git",
-        "Teamwork",
-        "Programming Basics",
-      ],
+      matchPercentage: 85,
+      postedDate: "Fallback Recommendation",
+      description: "اقتراح احتياطي مناسب لمهارات تطوير الواجهات.",
+      requirements: ["React", "JavaScript", "HTML", "CSS"],
     },
-  ].sort((a, b) => b.matchPercentage - a.matchPercentage);
+  ];
 }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", {
-      headers: corsHeaders,
-    });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
     const body = await req.json();
+    const skills = Array.isArray(body.skills) ? body.skills : [];
 
-    const skills: string[] = Array.isArray(body.skills)
-      ? body.skills
-      : [];
+    const apiKey =
+      Deno.env.get("GEMINI_API_KEY") ||
+      Deno.env.get("VITE_GEMINI_API_KEY");
 
-    return new Response(
-      JSON.stringify(smartJobs(skills)),
+    if (!apiKey) {
+      return new Response(JSON.stringify(fallbackJobs()), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const prompt = `
+You are an AI career advisor for fresh graduates.
+
+User skills:
+${skills.join(", ")}
+
+Suggest 5 suitable tech jobs.
+
+Return ONLY valid JSON array. No markdown.
+
+Each job must have:
+title, company, location, salary, type, experience, matchPercentage, postedDate, description, requirements.
+
+Use Arabic for description.
+company must be "AI Career Assistant".
+salary must be "حسب الخبرة".
+postedDate must be "AI Recommendation".
+requirements must be an array.
+matchPercentage must be a number from 60 to 98.
+`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
       {
-        status: 200,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+        }),
       }
     );
-  } catch {
-    return new Response(
-      JSON.stringify(smartJobs([])),
-      {
-        status: 200,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
-      }
-    );
+
+    const data = await response.json();
+
+    const text =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+    const cleanText = text
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
+      .trim();
+
+    const jobs = JSON.parse(cleanText);
+
+    return new Response(JSON.stringify(jobs), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (error) {
+    console.error("Gemini AI Error:", error);
+
+    return new Response(JSON.stringify(fallbackJobs()), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
